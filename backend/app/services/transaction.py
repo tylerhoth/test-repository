@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import re
 from datetime import date
 
@@ -17,6 +18,8 @@ from app.schemas.transaction import (
     TransactionUpdate,
 )
 
+logger = logging.getLogger(__name__)
+
 # Map CSV account names to account_type
 ACCOUNT_TYPE_MAP = {
     "checking": "checking",
@@ -33,6 +36,9 @@ ACCOUNT_TYPE_MAP = {
     "loan": "loan",
 }
 
+# Characters that can trigger formula execution in spreadsheets
+_FORMULA_CHARS = "=+@\t\r\n"
+
 
 def _guess_account_type(account_name: str) -> str:
     name_lower = account_name.lower()
@@ -46,6 +52,11 @@ def _parse_amount(amount_str: str) -> float:
     """Parse amount strings like '-$1,697.09' or '$5,700.00'."""
     cleaned = amount_str.replace("$", "").replace(",", "").strip()
     return float(cleaned)
+
+
+def _dollars_to_cents(amount: float) -> int:
+    """Convert a dollar float to integer cents, avoiding precision issues."""
+    return int(round(amount * 100))
 
 
 def _extract_last_four(account_name: str) -> str | None:
@@ -62,6 +73,14 @@ def _clean_account_name(account_name: str) -> str:
     if match:
         return match.group(1).strip()
     return account_name.strip()
+
+
+def _sanitize_csv_value(value: str) -> str:
+    """Strip leading characters that could trigger spreadsheet formula injection."""
+    if not value:
+        return value
+    stripped = value.lstrip(_FORMULA_CHARS)
+    return stripped or value
 
 
 class TransactionService:
@@ -106,7 +125,7 @@ class TransactionService:
         txn = self.txn_repo.create(
             date=data.date,
             description=data.description,
-            amount=data.amount,
+            amount=_dollars_to_cents(data.amount),
             category_id=data.category_id,
             account_id=data.account_id,
             tags=data.tags,
@@ -138,22 +157,24 @@ class TransactionService:
         categories_created_set: set[str] = set()
 
         rows = list(reader)
-        for row in rows:
+        for row_idx, row in enumerate(rows, start=1):
             try:
                 txn_date = date.fromisoformat(row["Date"])
-                description = row["Description"].strip()
+                description = _sanitize_csv_value(row["Description"].strip())
                 raw_description = description
                 amount = _parse_amount(row["Amount"])
-                category_name = row.get("Category", "").strip()
-                firm_name = row.get("Firm Name", "").strip()
+                category_name = _sanitize_csv_value(row.get("Category", "").strip())
+                firm_name = _sanitize_csv_value(row.get("Firm Name", "").strip())
                 account_name_raw = row.get("Account Name", "").strip()
-                tags = row.get("Tags", "").strip() or None
+                tags = _sanitize_csv_value(row.get("Tags", "").strip()) or None
 
                 # Get or create account
                 account_id = None
                 if account_name_raw and firm_name:
                     clean_name = _clean_account_name(account_name_raw)
-                    account = self.account_repo.find_by_name_and_institution(clean_name, firm_name)
+                    account = self.account_repo.find_by_name_and_institution(
+                        clean_name, firm_name
+                    )
                     if not account:
                         last_four = _extract_last_four(account_name_raw)
                         account = self.account_repo.create(
@@ -168,7 +189,9 @@ class TransactionService:
                 # Get or create category
                 category_id = None
                 if category_name:
-                    category = self.category_repo.get_or_create(category_name, is_system=True)
+                    category = self.category_repo.get_or_create(
+                        category_name, is_system=False
+                    )
                     if category.name in categories_created_set or not category.is_system:
                         pass  # already counted
                     categories_created_set.add(category.name)
@@ -178,13 +201,17 @@ class TransactionService:
                     date=txn_date,
                     description=description,
                     raw_description=raw_description,
-                    amount=amount,
+                    amount=_dollars_to_cents(amount),
                     category_id=category_id,
                     account_id=account_id,
                     tags=tags,
                 )
                 imported += 1
-            except (KeyError, ValueError):
+            except KeyError as exc:
+                logger.warning("CSV row %d skipped: missing field %s", row_idx, exc)
+                skipped += 1
+            except ValueError as exc:
+                logger.warning("CSV row %d skipped: %s", row_idx, exc)
                 skipped += 1
 
         return ImportResult(

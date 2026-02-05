@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, func
 
 from app.models.base import Base
 
@@ -9,7 +9,7 @@ class RecurrenceGroup(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String, nullable=False)
     description_pattern = Column(String, nullable=False)
-    expected_amount = Column(Float, nullable=False)
+    expected_amount = Column(Integer, nullable=False)  # cents
     frequency = Column(
         String, nullable=False
     )  # daily, weekly, biweekly, monthly, quarterly, annual

@@ -29,7 +29,7 @@ class BudgetService:
     def create_or_update_budget(self, data: BudgetCreate) -> BudgetOut:
         budget = self.repo.create_or_update(
             category_id=data.category_id,
-            amount_limit=data.amount_limit,
+            amount_limit=int(round(data.amount_limit * 100)),
         )
         return BudgetOut.model_validate(budget)
 

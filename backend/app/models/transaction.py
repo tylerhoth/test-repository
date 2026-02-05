@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Float, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, func
 
 from app.models.base import Base
 
@@ -10,7 +10,7 @@ class Transaction(Base):
     date = Column(Date, nullable=False)
     description = Column(String, nullable=False)
     raw_description = Column(String, nullable=True)
-    amount = Column(Float, nullable=False)  # negative = expense, positive = income
+    amount = Column(Integer, nullable=False)  # cents; negative = expense, positive = income
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
     is_recurring = Column(Boolean, default=False, nullable=False)

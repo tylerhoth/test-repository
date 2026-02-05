@@ -1,8 +1,7 @@
-from collections import Counter, defaultdict
-
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
+from app.models.account import Account
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.schemas.dashboard import (
@@ -21,130 +20,151 @@ class DashboardService:
         self.db = db
 
     def get_summary(self) -> DashboardSummary:
-        rows = list(self.db.execute(select(Transaction.amount)).scalars().all())
-        income = sum(a for a in rows if a > 0)
-        expenses = abs(sum(a for a in rows if a < 0))
+        result = self.db.execute(
+            select(
+                func.coalesce(
+                    func.sum(
+                        case((Transaction.amount > 0, Transaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("income_cents"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.amount < 0, func.abs(Transaction.amount)),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("expenses_cents"),
+                func.count().label("txn_count"),
+            )
+        ).one()
+
+        income_cents = result.income_cents
+        expenses_cents = result.expenses_cents
+
+        income = income_cents / 100
+        expenses = expenses_cents / 100
         net = income - expenses
         savings_rate = (net / income * 100) if income > 0 else 0.0
 
-        from app.models.account import Account
-
-        account_count = self.db.execute(select(func.count()).select_from(Account)).scalar() or 0
+        account_count = (
+            self.db.execute(select(func.count()).select_from(Account)).scalar() or 0
+        )
 
         return DashboardSummary(
             total_income=round(income, 2),
             total_expenses=round(expenses, 2),
             net_savings=round(net, 2),
             savings_rate=round(savings_rate, 1),
-            transaction_count=len(rows),
+            transaction_count=result.txn_count,
             account_count=account_count,
         )
 
     def spending_by_category(self) -> SpendingByCategoryResponse:
-        # Only expenses (negative amounts)
-        rows = list(
-            self.db.execute(
-                select(Transaction.category_id, Transaction.amount).where(Transaction.amount < 0)
-            ).all()
+        rows = self.db.execute(
+            select(
+                Transaction.category_id,
+                func.coalesce(Category.name, "Uncategorized").label("category_name"),
+                func.sum(func.abs(Transaction.amount)).label("total_cents"),
+                func.count().label("txn_count"),
+            )
+            .outerjoin(Category, Transaction.category_id == Category.id)
+            .where(Transaction.amount < 0)
+            .group_by(Transaction.category_id, Category.name)
+            .order_by(func.sum(func.abs(Transaction.amount)).desc())
+        ).all()
+
+        total_expenses_cents = sum(r.total_cents for r in rows)
+        total_expenses = total_expenses_cents / 100
+
+        items = [
+            CategorySpending(
+                category_id=r.category_id,
+                category_name=r.category_name,
+                total=round(r.total_cents / 100, 2),
+                transaction_count=r.txn_count,
+                percentage=(
+                    round(r.total_cents / total_expenses_cents * 100, 1)
+                    if total_expenses_cents > 0
+                    else 0
+                ),
+            )
+            for r in rows
+        ]
+
+        return SpendingByCategoryResponse(
+            items=items, total_expenses=round(total_expenses, 2)
         )
 
-        # Group by category
-        cat_totals: dict[int | None, float] = defaultdict(float)
-        cat_counts: dict[int | None, int] = Counter()
-        for cat_id, amount in rows:
-            cat_totals[cat_id] += abs(amount)
-            cat_counts[cat_id] += 1
-
-        total_expenses = sum(cat_totals.values())
-
-        # Look up category names
-        cat_names: dict[int | None, str] = {None: "Uncategorized"}
-        cat_ids = [cid for cid in cat_totals if cid is not None]
-        if cat_ids:
-            cats = list(
-                self.db.execute(
-                    select(Category.id, Category.name).where(Category.id.in_(cat_ids))
-                ).all()
-            )
-            for cid, cname in cats:
-                cat_names[cid] = cname
-
-        items = []
-        for cat_id, total in sorted(cat_totals.items(), key=lambda x: x[1], reverse=True):
-            items.append(
-                CategorySpending(
-                    category_id=cat_id,
-                    category_name=cat_names.get(cat_id, "Unknown"),
-                    total=round(total, 2),
-                    transaction_count=cat_counts[cat_id],
-                    percentage=round(total / total_expenses * 100, 1) if total_expenses > 0 else 0,
-                )
-            )
-
-        return SpendingByCategoryResponse(items=items, total_expenses=round(total_expenses, 2))
-
     def income_vs_expenses(self) -> IncomeVsExpensesResponse:
-        rows = list(self.db.execute(select(Transaction.date, Transaction.amount)).all())
-
-        monthly: dict[str, dict[str, float]] = defaultdict(lambda: {"income": 0.0, "expenses": 0.0})
-        for txn_date, amount in rows:
-            month_key = txn_date.strftime("%Y-%m")
-            if amount > 0:
-                monthly[month_key]["income"] += amount
-            else:
-                monthly[month_key]["expenses"] += abs(amount)
-
-        items = []
-        for month in sorted(monthly.keys()):
-            data = monthly[month]
-            items.append(
-                MonthlyComparison(
-                    month=month,
-                    income=round(data["income"], 2),
-                    expenses=round(data["expenses"], 2),
-                    net=round(data["income"] - data["expenses"], 2),
-                )
+        rows = self.db.execute(
+            select(
+                func.strftime("%Y-%m", Transaction.date).label("month"),
+                func.coalesce(
+                    func.sum(
+                        case((Transaction.amount > 0, Transaction.amount), else_=0)
+                    ),
+                    0,
+                ).label("income_cents"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (Transaction.amount < 0, func.abs(Transaction.amount)),
+                            else_=0,
+                        )
+                    ),
+                    0,
+                ).label("expenses_cents"),
             )
+            .group_by(func.strftime("%Y-%m", Transaction.date))
+            .order_by(func.strftime("%Y-%m", Transaction.date))
+        ).all()
+
+        items = [
+            MonthlyComparison(
+                month=r.month,
+                income=round(r.income_cents / 100, 2),
+                expenses=round(r.expenses_cents / 100, 2),
+                net=round((r.income_cents - r.expenses_cents) / 100, 2),
+            )
+            for r in rows
+        ]
 
         return IncomeVsExpensesResponse(items=items)
 
     def recurring_charges(self) -> RecurringChargesResponse:
         """Detect recurring charges by finding descriptions that appear 3+ times."""
-        rows = list(
-            self.db.execute(
-                select(Transaction.description, Transaction.amount, Transaction.category_id).where(
-                    Transaction.amount < 0
-                )
-            ).all()
-        )
-
-        # Group by description
-        desc_data: dict[str, list[float]] = defaultdict(list)
-        desc_cats: dict[str, int | None] = {}
-        for desc, amount, cat_id in rows:
-            desc_data[desc].append(abs(amount))
-            desc_cats[desc] = cat_id
-
-        # Get category names
-        all_cat_ids = {cid for cid in desc_cats.values() if cid is not None}
-        cat_names: dict[int | None, str] = {}
-        if all_cat_ids:
-            cats = list(
-                self.db.execute(
-                    select(Category.id, Category.name).where(Category.id.in_(all_cat_ids))
-                ).all()
+        rows = self.db.execute(
+            select(
+                Transaction.description,
+                func.avg(func.abs(Transaction.amount)).label("avg_cents"),
+                func.count().label("occurrences"),
+                Transaction.category_id,
             )
-            cat_names = {cid: cname for cid, cname in cats}
+            .where(Transaction.amount < 0)
+            .group_by(Transaction.description)
+            .having(func.count() >= 3)
+            .order_by(func.count().desc())
+            .limit(50)
+        ).all()
+
+        # Look up category names for grouped results
+        cat_ids = {r.category_id for r in rows if r.category_id is not None}
+        cat_names: dict[int, str] = {}
+        if cat_ids:
+            cats = self.db.execute(
+                select(Category.id, Category.name).where(Category.id.in_(cat_ids))
+            ).all()
+            cat_names = {c.id: c.name for c in cats}
 
         items = []
         total_monthly = 0.0
-        for desc, amounts in sorted(desc_data.items(), key=lambda x: len(x[1]), reverse=True):
-            if len(amounts) < 3:
-                continue
-            avg = sum(amounts) / len(amounts)
-            occurrences = len(amounts)
+        for r in rows:
+            avg = round(r.avg_cents / 100, 2)
+            occurrences = r.occurrences
 
-            # Estimate frequency
             if occurrences >= 60:
                 freq = "daily"
                 monthly_est = avg * 30
@@ -159,18 +179,19 @@ class DashboardService:
                 monthly_est = avg
 
             total_monthly += monthly_est
-            cat_id = desc_cats.get(desc)
             items.append(
                 RecurringCharge(
-                    description=desc,
-                    average_amount=round(avg, 2),
+                    description=r.description,
+                    average_amount=avg,
                     frequency=freq,
                     occurrences=occurrences,
-                    category_name=cat_names.get(cat_id) if cat_id else None,
+                    category_name=(
+                        cat_names.get(r.category_id) if r.category_id else None
+                    ),
                 )
             )
 
         return RecurringChargesResponse(
-            items=items[:50],  # Top 50 recurring
+            items=items,
             total_monthly_recurring=round(total_monthly, 2),
         )

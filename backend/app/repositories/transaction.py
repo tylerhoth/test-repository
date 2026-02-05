@@ -82,8 +82,7 @@ class TransactionRepository:
         if not txn:
             return None
         for key, value in kwargs.items():
-            if value is not None:
-                setattr(txn, key, value)
+            setattr(txn, key, value)
         self.db.commit()
         self.db.refresh(txn)
         return txn

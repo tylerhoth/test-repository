@@ -67,9 +67,16 @@ def delete_transaction(txn_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Transaction not found")
 
 
+MAX_CSV_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
 @router.post("/transactions/import", response_model=ImportResult)
 async def import_transactions(file: UploadFile, db: Session = Depends(get_db)):
     content = await file.read()
+    if len(content) > MAX_CSV_SIZE:
+        raise HTTPException(
+            status_code=413, detail="File too large. Maximum size is 10 MB."
+        )
     csv_text = content.decode("utf-8")
 
     # Strip optional header line like "Transactions For All Accounts..."

@@ -1,12 +1,12 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class TransactionCreate(BaseModel):
     date: date
     description: str
-    amount: float
+    amount: float  # dollars; converted to integer cents in service layer
     category_id: int | None = None
     account_id: int | None = None
     tags: str | None = None
@@ -34,6 +34,14 @@ class TransactionOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def cents_to_dollars(cls, v: object) -> object:
+        """DB stores integer cents; convert to dollars for API output."""
+        if isinstance(v, int):
+            return v / 100
+        return v
 
 
 class TransactionListResponse(BaseModel):

@@ -1,4 +1,4 @@
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 
 from app.models.category_rule import CategoryRule
@@ -43,16 +43,14 @@ class CategoryRuleRepository:
         return rule
 
     def find_matching(self, description: str) -> CategoryRule | None:
-        """Find the best matching rule for a description."""
-        rules = list(
-            self.db.execute(select(CategoryRule).order_by(CategoryRule.confidence.desc()))
-            .scalars()
-            .all()
-        )
-        for rule in rules:
-            if rule.pattern.lower() in description.lower():
-                return rule
-        return None
+        """Find the best matching rule for a description using a DB query."""
+        desc_lower = description.lower()
+        return self.db.execute(
+            select(CategoryRule)
+            .where(literal(desc_lower).contains(func.lower(CategoryRule.pattern)))
+            .order_by(CategoryRule.confidence.desc())
+            .limit(1)
+        ).scalar_one_or_none()
 
     def increment_applied(self, rule_id: int) -> None:
         rule = self.db.get(CategoryRule, rule_id)

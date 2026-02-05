@@ -1,0 +1,17 @@
+{
+  "name": "fullstack-starter",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n be,fe -c blue,green \"cd backend && uvicorn app.main:app --reload --port 8000\" \"pnpm --filter fullstack-frontend dev\"",
+    "test": "cd backend && python3 -m pytest app/tests/ -v && cd .. && pnpm --filter fullstack-frontend test",
+    "lint": "cd backend && ruff check . && cd .. && pnpm --filter fullstack-frontend lint",
+    "fmt": "cd backend && ruff format . && cd .. && pnpm --filter fullstack-frontend fmt",
+    "gen:types": "bash scripts/gen-types.sh"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

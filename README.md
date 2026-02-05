@@ -80,12 +80,49 @@ Vite + React + TypeScript SPA:
 
 Response shape: `{ items, total, page, page_size }`
 
+## Multi-Agent Engineering Team
+
+This repo includes a **30-agent AI engineering team** in `.claude/agents/`. Claude Code automatically delegates to the right specialist based on task context. You can also invoke agents explicitly.
+
+### Team Structure
+
+| Group | Agents | Roles |
+|-------|--------|-------|
+| Leadership (3) | tech-lead, product-owner, scrum-master | Coordination, specs, progress tracking |
+| Architecture (3) | solution-architect, api-designer, database-architect | System design, API contracts, schema design |
+| Backend (4) | backend-senior, backend-api, backend-services, backend-data | Full-stack backend implementation |
+| Frontend (4) | frontend-senior, frontend-components, frontend-pages, frontend-state | React components, pages, state management |
+| Quality (4) | qa-lead, test-backend, test-frontend, test-e2e | Test strategy, test writing, E2E scenarios |
+| DevOps (3) | devops-engineer, infra-architect, site-reliability | CI/CD, infrastructure, monitoring |
+| Security (2) | security-auditor, security-reviewer | Vulnerability audit, security code review |
+| Code Quality (3) | code-reviewer, refactor-specialist, performance-engineer | Review, refactoring, optimization |
+| Specialized (4) | debugger, technical-writer, knowledge-curator, integration-specialist | Debugging, docs, knowledge, integrations |
+| Creative (1) | idea-generator | Brainstorm and evaluate app ideas |
+
+### Usage
+
+```
+# Direct delegation
+Use the backend-senior agent to implement a Comments feature
+Have the security-auditor scan the codebase
+
+# Orchestrated workflows (skills)
+/team-kickoff    — Bootstrap a new app idea with the full team
+/build-app       — Implement a feature end-to-end with all agents
+/sprint-plan     — Plan and execute a sprint of coordinated work
+/team-review     — Multi-agent code + security + performance review
+```
+
 ## Claude Code Skills
 
 This repo includes Claude Code skills in `.claude/skills/`:
 
 | Skill | Description |
 |-------|-------------|
+| `/team-kickoff` | Bootstrap a new app idea with the full agent team |
+| `/build-app` | End-to-end implementation from idea to working code |
+| `/sprint-plan` | Plan and execute a sprint across multiple agents |
+| `/team-review` | Multi-agent code, security, and performance review |
 | `/feature-slice` | Generate a full-stack CRUD feature for a new entity |
 | `/test-triage` | Run tests and diagnose failures |
 | `/deploy-prep` | Add Dockerfiles, CI, and deployment checklist |

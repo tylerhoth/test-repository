@@ -1,4 +1,4 @@
-# Fullstack Starter — Project Instructions
+# CashLens — Project Instructions
 
 ## Stack
 
@@ -37,13 +37,26 @@ frontend/src/
   tests/       → vitest
 ```
 
+## Domain Models
+
+- **Account** — Financial accounts (checking, credit card, savings, IRA, 401k, mortgage, loan)
+- **Transaction** — Individual financial transactions with date, description, amount, category
+- **Category** — Spending/income categories (system-defined or user-created)
+- **CategoryRule** — Auto-categorization rules learned from user corrections
+- **Budget** — Monthly budget limits per category
+- **Insight** — AI-generated financial observations
+- **RecurrenceGroup** — Detected recurring charges
+- **Label** — User-defined labels with color
+
 ## Conventions
 
 - List endpoints: `page`, `page_size`, `q`, `sort_by`, `sort_dir`
+- Transaction list also supports: `account_id`, `category_id`, `date_from`, `date_to`
 - Response envelope: `{ items, total, page, page_size }`
 - Sorting: allowlist-based (SORTABLE_FIELDS set)
 - Primary keys: integer autoincrement `id`
 - Create → 201, Delete → 204, Not found → 404
+- CSV import: POST /api/transactions/import with multipart file upload
 
 ## Agent Team (30 engineers)
 

@@ -1,6 +1,6 @@
-# Fullstack Starter
+# CashLens — Personal Finance Assistant
 
-A monorepo with a FastAPI backend and a Vite + React + TypeScript frontend.
+A personal finance application that ingests transaction data, performs deep analysis, and acts as a professional financial advisor. Built as a monorepo with FastAPI backend and Vite + React + TypeScript frontend.
 
 ## Prerequisites
 
@@ -66,19 +66,48 @@ Vite + React + TypeScript SPA:
 |--------|------|-------------|
 | GET | `/health` | Health check |
 | GET | `/version` | App version |
-| GET | `/api/todos` | List todos (paginated, searchable, sortable) |
-| POST | `/api/todos` | Create a todo |
-| DELETE | `/api/todos/{id}` | Delete a todo |
+| GET | `/api/accounts` | List accounts |
+| POST | `/api/accounts` | Create account |
+| GET | `/api/categories` | List categories |
+| POST | `/api/categories` | Create category |
+| GET | `/api/transactions` | List transactions (filterable by account, category, date range) |
+| POST | `/api/transactions` | Create transaction |
+| PUT | `/api/transactions/{id}` | Update/recategorize transaction |
+| DELETE | `/api/transactions/{id}` | Delete transaction |
+| POST | `/api/transactions/import` | Import CSV file |
+| GET | `/api/category-rules` | List auto-categorization rules |
+| POST | `/api/category-rules` | Create categorization rule |
+| GET | `/api/budgets` | List budgets |
+| POST | `/api/budgets` | Create/update budget |
+| DELETE | `/api/budgets/{id}` | Delete budget |
+| GET | `/api/dashboard/summary` | Financial summary (income, expenses, savings rate) |
+| GET | `/api/dashboard/spending-by-category` | Category spending breakdown |
+| GET | `/api/dashboard/income-vs-expenses` | Monthly income vs expenses |
+| GET | `/api/dashboard/recurring` | Detected recurring charges |
+| GET | `/api/insights` | Financial insights |
+| GET | `/api/labels` | List labels |
+| POST | `/api/labels` | Create label |
+| DELETE | `/api/labels/{id}` | Delete label |
+| GET | `/api/todos` | List todos |
+| POST | `/api/todos` | Create todo |
+| DELETE | `/api/todos/{id}` | Delete todo |
 
 ### List endpoint query params
 
 - `page` (default: 1)
 - `page_size` (default: 20, max: 100)
-- `q` — search filter on title
-- `sort_by` — field to sort by (allowlist: id, title, completed, created_at)
+- `q` — search filter
+- `sort_by` — field to sort by (allowlist per entity)
 - `sort_dir` — `asc` or `desc`
+- `account_id` — filter transactions by account
+- `category_id` — filter transactions by category
+- `date_from` / `date_to` — filter transactions by date range
 
 Response shape: `{ items, total, page, page_size }`
+
+### CSV Import Format
+
+The import endpoint accepts CSV files with columns: `Date, Description, Category, Firm Name, Account Name, Amount, Tags`. Accounts and categories are auto-created on import. Sample data is in `backend/data/sample_transactions.csv`.
 
 ## Multi-Agent Engineering Team
 
